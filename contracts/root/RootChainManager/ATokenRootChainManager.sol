@@ -314,7 +314,7 @@ contract ATokenRootChainManager is
     * @dev Converts aToken value to maToken value
     * @param _aTokenAddress aToken contract address
     * @param _aTokenValue aToken value to convert
-    * @return The converted maToken value
+    * @return maTokenValue_ The converted maToken value
     **/
     function getMATokenValue(address _aTokenAddress, uint256 _aTokenValue) public returns (uint256 maTokenValue_) {
         ILendingPool pool = IAToken(_aTokenAddress).POOL();
@@ -326,7 +326,7 @@ contract ATokenRootChainManager is
     * @dev Converts maToken value to aToken value
     * @param _aTokenAddress aToken contract address
     * @param _maTokenValue maToken value to convert
-    * @return The converted aToken value
+    * @return aTokenValue_ The converted aToken value
     **/
     function getATokenValue(address _aTokenAddress, uint256 _maTokenValue) external returns (uint256 aTokenValue_) {
         ILendingPool pool = IAToken(_aTokenAddress).POOL();
