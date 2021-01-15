@@ -31,7 +31,7 @@ async function main () {
   const childTokenBytecodeHash = await childChainManagerProxy.childTokenBytecodeHash()
   console.log('childTokenBytecodeHash:', childTokenBytecodeHash)
 
-  // ChildChainManagerProxy: 0x14aB595377e4fccCa46062A9109FFAC7FA4d3F18
+  // ChildChainManagerProxy: 0x4fe23a33922BcC5e560fdd74A84cDDe4D2BdaaAC
 }
 
 // We recommend this pattern to be able to use async/await everywhere

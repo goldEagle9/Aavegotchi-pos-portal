@@ -1,6 +1,7 @@
 /* global task ethers */
 require('@nomiclabs/hardhat-waffle')
 require('@nomiclabs/hardhat-ethers')
+require('@nomiclabs/hardhat-etherscan')
 require('hardhat-contract-sizer')
 require('dotenv').config()
 require('solidity-coverage')
@@ -48,6 +49,11 @@ module.exports = {
       blockGasLimit: 12000000,
       gasPrice: 62000000000
     }
+  },
+  etherscan: {
+    // Your API key for Etherscan
+    // Obtain one at https://etherscan.io/
+    apiKey: process.env.ETHERSCAN_APIKEY
   },
   gasReporter: {
     currency: 'USD',

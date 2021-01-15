@@ -9,28 +9,6 @@ const rootTokenAddress = '0x028171bca77440897b824ca71d1c56cac55b68a3'
 const childTokenBytecodeHash = '0xb1746eb04870e235a8fc718690604b2fe0b2d5bce6aa6cf61b342d7157b300ff'
 
 async function main () {
-  // const flatFiles = await run('flatten', {
-  //   files: [
-  //     'contracts/root/TokenPredicates/AERC20Predicate.sol',
-  //     'contracts/root/TokenPredicates/ERC20PredicateProxy.sol'
-  //   ]
-  // })
-  // console.log(flatFiles.length)
-  // throw ('done')
-  // const UChildERC20Proxy = await ethers.getContractFactory('MATokenUChildERC20Proxy')
-  // const uChildERC20Proxy = await UChildERC20Proxy.deploy()
-  // await uChildERC20Proxy.deployed()
-  // console.log(ethers.utils.keccak256(UChildERC20Proxy.bytecode)) // 0xb1746eb04870e235a8fc718690604b2fe0b2d5bce6aa6cf61b342d7157b300ff
-  // console.log(UChildERC20Proxy.bytecode)
-  // 0x16ff4b0fcf796e2dfb415d0dea528582c7aed1c3436853a33a4281cbf9689350
-  // 0x9b3cd6a953e38dff0e5b428ef8a2f7ae1890f14e5f639965b3e22d18962f769f
-  //  0x4959ff3e96c30a2fb562999a1db557e0a712887558abb76edd8903562f0ee05b
-  // 0xf683f687ddcdbe98495276612c57e897a80b836b82fa6a0c77a8a828cd69b98a
-  // 0xf683f687ddcdbe98495276612c57e897a80b836b82fa6a0c77a8a828cd69b98a
-  // 0x1d675e7e0ac927de118d62c0eb565083152b6a770735496c6027a0187afaf43f
-  // 0x6a623b988233a47c799a9e3740528eda4e2cae607f7b6ff27ff664166b7bfcf7
-  // throw ('done')
-
   const accounts = await ethers.getSigners()
   const account = await accounts[0].getAddress()
 
@@ -46,7 +24,7 @@ async function main () {
 
   rootChainManagerProxy = await ethers.getContractAt('ATokenRootChainManager', rootChainManagerProxy.address)
 
-  let tx = await rootChainManagerProxy.initialize(
+  const tx = await rootChainManagerProxy.initialize(
     account,
     stateSenderAddress,
     checkpointManagerAddress,
@@ -55,7 +33,7 @@ async function main () {
   )
 
   console.log('Initializing: ', tx.hash)
-  let receipt = await tx.wait()
+  const receipt = await tx.wait()
 
   if (receipt.status) {
     console.log('RootChainManager initialized successfully')
@@ -64,6 +42,10 @@ async function main () {
     throw (Error('Contract transaction failed'))
   }
 
+  // Deployed RootChainManager:  0x4db0319a402809a2c81051AB1549acF15809D1b3
+  // Deployed RootChainManagerProxy:  0x0D29aDA4c818A9f089107201eaCc6300e56E0d5c
+
+  /*
   tx = await rootChainManagerProxy.mapToken(rootTokenAddress)
   console.log('Mapping token: ', tx.hash)
 
@@ -74,6 +56,7 @@ async function main () {
   } else {
     console.log('Mapping failed')
   }
+  */
 
   // call mapping function man
 }
