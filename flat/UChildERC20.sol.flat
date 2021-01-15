@@ -1,5 +1,6 @@
+// Sources flattened with hardhat v2.0.7 https://hardhat.org
 
-// File: @openzeppelin/contracts/GSN/Context.sol
+// File @openzeppelin/contracts/GSN/Context.sol@v3.1.0
 
 // SPDX-License-Identifier: MIT
 
@@ -26,7 +27,8 @@ abstract contract Context {
     }
 }
 
-// File: @openzeppelin/contracts/token/ERC20/IERC20.sol
+
+// File @openzeppelin/contracts/token/ERC20/IERC20.sol@v3.1.0
 
 // SPDX-License-Identifier: MIT
 
@@ -106,7 +108,8 @@ interface IERC20 {
     event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
-// File: @openzeppelin/contracts/math/SafeMath.sol
+
+// File @openzeppelin/contracts/math/SafeMath.sol@v3.1.0
 
 // SPDX-License-Identifier: MIT
 
@@ -268,7 +271,8 @@ library SafeMath {
     }
 }
 
-// File: @openzeppelin/contracts/utils/Address.sol
+
+// File @openzeppelin/contracts/utils/Address.sol@v3.1.0
 
 // SPDX-License-Identifier: MIT
 
@@ -412,16 +416,12 @@ library Address {
     }
 }
 
-// File: contracts/child/ChildToken/UpgradeableChildERC20/ERC20.sol
+
+// File contracts/child/ChildToken/UpgradeableChildERC20/ERC20.sol
 
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.6.0;
-
-
-
-
-
 /**
  * Modified openzeppelin implemtation to add setters for name, symbol and decimals.
  * This was needed because the variables cannot be set in constructor as the contract is upgradeable.
@@ -741,7 +741,8 @@ contract ERC20 is Context, IERC20 {
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual { }
 }
 
-// File: @openzeppelin/contracts/utils/EnumerableSet.sol
+
+// File @openzeppelin/contracts/utils/EnumerableSet.sol@v3.1.0
 
 // SPDX-License-Identifier: MIT
 
@@ -987,12 +988,12 @@ library EnumerableSet {
     }
 }
 
-// File: @openzeppelin/contracts/access/AccessControl.sol
+
+// File @openzeppelin/contracts/access/AccessControl.sol@v3.1.0
 
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.6.0;
-
 
 
 
@@ -1206,11 +1207,10 @@ abstract contract AccessControl is Context {
     }
 }
 
-// File: contracts/common/AccessControlMixin.sol
+
+// File contracts/common/AccessControlMixin.sol
 
 pragma solidity 0.6.6;
-
-
 contract AccessControlMixin is AccessControl {
     string private _revertMsg;
     function _setupContractId(string memory contractId) internal {
@@ -1226,7 +1226,8 @@ contract AccessControlMixin is AccessControl {
     }
 }
 
-// File: contracts/child/ChildToken/IChildToken.sol
+
+// File contracts/child/ChildToken/IChildToken.sol
 
 pragma solidity 0.6.6;
 
@@ -1234,7 +1235,8 @@ interface IChildToken {
     function deposit(address user, bytes calldata depositData) external;
 }
 
-// File: contracts/common/Initializable.sol
+
+// File contracts/common/Initializable.sol
 
 pragma solidity 0.6.6;
 
@@ -1248,11 +1250,10 @@ contract Initializable {
     }
 }
 
-// File: contracts/common/EIP712Base.sol
+
+// File contracts/common/EIP712Base.sol
 
 pragma solidity 0.6.6;
-
-
 contract EIP712Base is Initializable {
     struct EIP712Domain {
         string name;
@@ -1325,12 +1326,10 @@ contract EIP712Base is Initializable {
     }
 }
 
-// File: contracts/common/NativeMetaTransaction.sol
+
+// File contracts/common/NativeMetaTransaction.sol
 
 pragma solidity 0.6.6;
-
-
-
 contract NativeMetaTransaction is EIP712Base {
     using SafeMath for uint256;
     bytes32 private constant META_TRANSACTION_TYPEHASH = keccak256(
@@ -1431,7 +1430,8 @@ contract NativeMetaTransaction is EIP712Base {
     }
 }
 
-// File: contracts/common/ContextMixin.sol
+
+// File contracts/common/ContextMixin.sol
 
 pragma solidity 0.6.6;
 
@@ -1458,16 +1458,10 @@ abstract contract ContextMixin {
     }
 }
 
-// File: contracts/child/ChildToken/UpgradeableChildERC20/UChildERC20.sol
+
+// File contracts/child/ChildToken/UpgradeableChildERC20/UChildERC20.sol
 
 pragma solidity 0.6.6;
-
-
-
-
-
-
-
 contract UChildERC20 is
     ERC20,
     IChildToken,

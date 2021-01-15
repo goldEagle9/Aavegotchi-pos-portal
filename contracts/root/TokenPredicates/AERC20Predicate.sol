@@ -16,7 +16,7 @@ interface IAToken {
     function UNDERLYING_ASSET_ADDRESS() external returns(address);
 }
 
-contract ERC20Predicate is ITokenPredicate, AccessControlMixin, Initializable {
+contract AERC20Predicate is ITokenPredicate, AccessControlMixin, Initializable {
     using RLPReader for bytes;
     using RLPReader for RLPReader.RLPItem;
     using SafeERC20 for IERC20;

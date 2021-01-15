@@ -1,5 +1,6 @@
+// Sources flattened with hardhat v2.0.7 https://hardhat.org
 
-// File: contracts/common/Proxy/IERCProxy.sol
+// File contracts/common/Proxy/IERCProxy.sol
 
 pragma solidity 0.6.6;
 
@@ -9,11 +10,10 @@ interface IERCProxy {
     function implementation() external view returns (address codeAddr);
 }
 
-// File: contracts/common/Proxy/Proxy.sol
+
+// File contracts/common/Proxy/Proxy.sol
 
 pragma solidity 0.6.6;
-
-
 abstract contract Proxy is IERCProxy {
     function delegatedFwd(address _dst, bytes memory _calldata) internal {
         // solium-disable-next-line security/no-inline-assembly
@@ -51,11 +51,10 @@ abstract contract Proxy is IERCProxy {
     function implementation() external virtual override view returns (address);
 }
 
-// File: contracts/common/Proxy/UpgradableProxy.sol
+
+// File contracts/common/Proxy/UpgradableProxy.sol
 
 pragma solidity 0.6.6;
-
-
 contract UpgradableProxy is Proxy {
     event ProxyUpdated(address indexed _new, address indexed _old);
     event ProxyOwnerUpdate(address _new, address _old);
@@ -156,12 +155,11 @@ contract UpgradableProxy is Proxy {
     }
 }
 
-// File: contracts/root/TokenPredicates/EtherPredicateProxy.sol
+
+// File contracts/child/ChildChainManager/ChildChainManagerProxy.sol
 
 pragma solidity 0.6.6;
-
-
-contract EtherPredicateProxy is UpgradableProxy {
+contract ChildChainManagerProxy is UpgradableProxy {
     constructor(address _proxyTo)
         public
         UpgradableProxy(_proxyTo)

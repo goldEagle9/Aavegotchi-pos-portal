@@ -1,19 +1,19 @@
 pragma solidity 0.6.6;
 
 import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
-import {IRootChainManager} from "./IRootChainManager.sol";
-import {RootChainManagerStorage} from "./RootChainManagerStorage.sol";
+import {ATokenRootChainManagerStorage} from "./ATokenRootChainManagerStorage.sol"; 
 import {IStateSender} from "../StateSender/IStateSender.sol";
 import {ICheckpointManager} from "../ICheckpointManager.sol";
 import {RLPReader} from "../../lib/RLPReader.sol";
 import {MerklePatriciaProof} from "../../lib/MerklePatriciaProof.sol";
 import {Merkle} from "../../lib/Merkle.sol";
-import {ITokenPredicate} from "../TokenPredicates/ITokenPredicate.sol";
 import {Initializable} from "../../common/Initializable.sol";
 import {NativeMetaTransaction} from "../../common/NativeMetaTransaction.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AccessControlMixin} from "../../common/AccessControlMixin.sol";
 import {ContextMixin} from "../../common/ContextMixin.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
 
 interface ILendingPool {
     function getReserveNormalizedIncome(address _asset) external view returns (uint256);
@@ -24,11 +24,16 @@ interface IAToken {
     function UNDERLYING_ASSET_ADDRESS() external returns(address);
 }
 
-contract ATokenRootChainManager is
-    IRootChainManager,
+interface IERC20Meta {
+    function name() external view returns (string memory);
+    function symbol() external view returns (string memory);
+    function decimals() external view returns (uint8);
+}
+
+contract ATokenRootChainManager is    
     Initializable,
     AccessControl, // included to match old storage layout while upgrading
-    RootChainManagerStorage, // created to match old storage layout while upgrading
+    ATokenRootChainManagerStorage, // created to match old storage layout while upgrading
     AccessControlMixin,
     NativeMetaTransaction,
     ContextMixin
@@ -37,14 +42,28 @@ contract ATokenRootChainManager is
     using RLPReader for RLPReader.RLPItem;
     using Merkle for bytes32;
     using SafeMath for uint256;
+    using SafeERC20 for IERC20;
 
     // maybe DEPOSIT and MAP_TOKEN can be reduced to bytes4
     bytes32 public constant DEPOSIT = keccak256("DEPOSIT");
-    bytes32 public constant MAP_TOKEN = keccak256("MAP_TOKEN");
-    address public constant ETHER_ADDRESS = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    bytes32 public constant MAP_TOKEN = keccak256("MAP_TOKEN");    
     bytes32 public constant MAPPER_ROLE = keccak256("MAPPER_ROLE");
     uint256 internal constant P27 = 1e27;
     uint256 internal constant HALF_P27 = P27 / 2;
+    bytes32 public constant TRANSFER_EVENT_SIG = 0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef;
+
+   event TokenMapped(
+        address indexed rootToken,
+        address indexed childToken,
+        bytes32 indexed tokenType
+    );
+
+    event LockedERC20(
+        address indexed depositor,
+        address indexed depositReceiver,
+        address indexed rootToken,
+        uint256 amount
+    );
 
     function _msgSender()
         internal
@@ -60,24 +79,32 @@ contract ATokenRootChainManager is
      * The account sending ether receives WETH on child chain
      */
     receive() external payable {
-        _depositEtherFor(_msgSender());
+        revert("Cannot send ETH over aToken bridge");
     }
 
     /**
      * @notice Initialize the contract after it has been proxified
      * @dev meant to be called once immediately after deployment
-     * @param _owner the account that should be granted admin role
+     * @param owner the account that should be granted admin role
      */
     function initialize(
-        address _owner
+        address owner,
+        address stateSender,
+        address checkpointManager,
+        address _childChainManagerAddress,
+        bytes32 _childTokenBytecodeHash
     )
         external
         initializer
     {
-        _initializeEIP712("RootChainManager");
-        _setupContractId("RootChainManager");
-        _setupRole(DEFAULT_ADMIN_ROLE, _owner);
-        _setupRole(MAPPER_ROLE, _owner);
+        _initializeEIP712("ATokenRootChainManager");
+        _setupContractId("ATokenRootChainManager");
+        _setupRole(DEFAULT_ADMIN_ROLE, owner);
+        _setupRole(MAPPER_ROLE, owner);
+        _stateSender = IStateSender(stateSender);
+        _checkpointManager = ICheckpointManager(checkpointManager);
+        childChainManagerAddress = _childChainManagerAddress;
+        childTokenBytecodeHash = _childTokenBytecodeHash;        
     }
 
     // adding seperate function setupContractId since initialize is already called with old implementation
@@ -85,7 +112,7 @@ contract ATokenRootChainManager is
         external
         only(DEFAULT_ADMIN_ROLE)
     {
-        _setupContractId("RootChainManager");
+        _setupContractId("ATokenRootChainManager");
     }
 
     // adding seperate function initializeEIP712 since initialize is already called with old implementation
@@ -93,7 +120,7 @@ contract ATokenRootChainManager is
         external
         only(DEFAULT_ADMIN_ROLE)
     {
-        _setDomainSeperator("RootChainManager");
+        _setDomainSeperator("ATokenRootChainManager");
     }
 
     /**
@@ -141,110 +168,113 @@ contract ATokenRootChainManager is
      * @notice Set the child chain manager, callable only by admins
      * @dev This should be the contract responsible to receive deposit bytes on child chain
      * @param newChildChainManager address of child chain manager contract
+     * @param newChildTokenBytecodeHash hash of bytecode used to create child token
+     */
+    function setChildChainManagerAddressAndChildTokenBytecodeHash(address newChildChainManager, bytes32 newChildTokenBytecodeHash)
+        external
+        only(DEFAULT_ADMIN_ROLE)
+    {
+        require(newChildChainManager != address(0x0), "ATokenRootChainManager: INVALID_CHILD_CHAIN_ADDRESS");
+        childChainManagerAddress = newChildChainManager;        
+        childTokenBytecodeHash = newChildTokenBytecodeHash;
+    }
+
+    /**
+     * @notice Set the child chain manager, callable only by admins
+     * @dev This should be the contract responsible to receive deposit bytes on child chain
+     * @param newChildChainManager address of child chain manager contract     
      */
     function setChildChainManagerAddress(address newChildChainManager)
         external
         only(DEFAULT_ADMIN_ROLE)
     {
-        require(newChildChainManager != address(0x0), "RootChainManager: INVALID_CHILD_CHAIN_ADDRESS");
-        childChainManagerAddress = newChildChainManager;
+        require(newChildChainManager != address(0x0), "ATokenRootChainManager: INVALID_CHILD_CHAIN_ADDRESS");
+        childChainManagerAddress = newChildChainManager;                
     }
 
     /**
-     * @notice Register a token predicate address against its type, callable only by mappers
-     * @dev A predicate is a contract responsible to process the token specific logic while locking or exiting tokens
-     * @param tokenType bytes32 unique identifier for the token type
-     * @param predicateAddress address of token predicate address
+     * @notice Set the child bytecode hash
+     * @dev This is used by a create2 call to precalculate the child token address
+     * @param newChildTokenBytecodeHash address of child chain manager contract     
      */
-    function registerPredicate(bytes32 tokenType, address predicateAddress)
+    function setChildTokenBytecodeHash(bytes32 newChildTokenBytecodeHash)
         external
-        override
-        only(MAPPER_ROLE)
-    {
-        typeToPredicate[tokenType] = predicateAddress;
-        emit PredicateRegistered(tokenType, predicateAddress);
+        only(DEFAULT_ADMIN_ROLE)
+    {        
+        childTokenBytecodeHash = newChildTokenBytecodeHash;                
+    }
+
+    
+    function childTokenAddress(address rootToken) public view returns (address childToken_) {
+        // precompute childToken address for mapping
+        childToken_ = address(uint160(uint(keccak256(abi.encodePacked(
+            bytes1(0xff),
+            childChainManagerAddress, // contract creating address
+            bytes32(bytes20(rootToken)), // salt
+            childTokenBytecodeHash // bytecode hash
+        )))));
     }
 
     /**
      * @notice Map a token to enable its movement via the PoS Portal, callable only by mappers
-     * @param rootToken address of token on root chain
-     * @param childToken address of token on child chain
-     * @param tokenType bytes32 unique identifier for the token type
+     * @param rootToken address of token on root chain     
      */
     function mapToken(
-        address rootToken,
-        address childToken,
-        bytes32 tokenType
-    ) external override only(MAPPER_ROLE) {
+        address rootToken        
+    ) external only(MAPPER_ROLE) {
         // explicit check if token is already mapped to avoid accidental remaps
         require(
-            rootToChildToken[rootToken] == address(0) &&
-            childToRootToken[childToken] == address(0),
-            "RootChainManager: ALREADY_MAPPED"
+            rootToChildToken[rootToken] == address(0),
+            "ATokenRootChainManager: ALREADY_MAPPED"
         );
-        _mapToken(rootToken, childToken, tokenType);
+        address childToken = childTokenAddress(rootToken);
+        _mapToken(rootToken, childToken);
     }
 
     /**
      * @notice Remap a token that has already been mapped, properly cleans up old mapping
      * Callable only by mappers
-     * @param rootToken address of token on root chain
-     * @param childToken address of token on child chain
-     * @param tokenType bytes32 unique identifier for the token type
+     * @param rootToken address of token on root chain     
      */
     function remapToken(
-        address rootToken,
-        address childToken,
-        bytes32 tokenType
-    ) external override only(MAPPER_ROLE) {
+        address rootToken        
+    ) external only(MAPPER_ROLE) {
+        address childToken = childTokenAddress(rootToken);
         // cleanup old mapping
         address oldChildToken = rootToChildToken[rootToken];
+        require(childToken != oldChildToken, "ATokenRootChainManager: Child token is the same");
         address oldRootToken = childToRootToken[childToken];
-
         if (rootToChildToken[oldRootToken] != address(0)) {
-            rootToChildToken[oldRootToken] = address(0);
-            tokenToType[oldRootToken] = bytes32(0);
+            rootToChildToken[oldRootToken] = address(0);            
         }
 
         if (childToRootToken[oldChildToken] != address(0)) {
             childToRootToken[oldChildToken] = address(0);
-        }
-
-        _mapToken(rootToken, childToken, tokenType);
+        }      
+        _mapToken(rootToken, childToken);
     }
 
     function _mapToken(
         address rootToken,
-        address childToken,
-        bytes32 tokenType
-    ) private {
-        require(
-            typeToPredicate[tokenType] != address(0x0),
-            "RootChainManager: TOKEN_TYPE_NOT_SUPPORTED"
-        );
-
+        address childToken
+    ) private {                        
         rootToChildToken[rootToken] = childToken;
-        childToRootToken[childToken] = rootToken;
-        tokenToType[rootToken] = tokenType;
+        childToRootToken[childToken] = rootToken;        
 
-        emit TokenMapped(rootToken, childToken, tokenType);
+        emit TokenMapped(rootToken, childToken, 0x0);
 
-        bytes memory syncData = abi.encode(rootToken, childToken, tokenType);
+        bytes memory syncData = abi.encode(            
+            rootToken, 
+            abi.encodePacked('Matic ', IERC20Meta(rootToken).name()),
+            abi.encodePacked('m',IERC20Meta(rootToken).symbol()),
+            IERC20Meta(rootToken).decimals()
+        );
         _stateSender.syncState(
             childChainManagerAddress,
             abi.encode(MAP_TOKEN, syncData)
         );
     }
-
-    /**
-     * @notice Move ether from root to child chain, accepts ether transfer
-     * Keep in mind this ether cannot be used to pay gas on child chain
-     * Use Matic tokens deposited using plasma mechanism for that
-     * @param user address of account that should receive WETH on child chain
-     */
-    function depositEtherFor(address user) external override payable {
-        _depositEtherFor(user);
-    }
+    
 
     /**
      * @notice Move tokens from root to child chain
@@ -256,26 +286,34 @@ contract ATokenRootChainManager is
     function depositFor(
         address user,
         address rootToken,
-        bytes calldata depositData
-    ) external override {
+        bytes memory depositData
+    ) public {        
+        require(rootToChildToken[rootToken] != address(0x0), "ATokenRootChainManager: TOKEN_NOT_MAPPED");
         require(
-            rootToken != ETHER_ADDRESS,
-            "RootChainManager: INVALID_ROOT_TOKEN"
+            user != address(0),
+            "ATokenRootChainManager: INVALID_USER"
         );
-        _depositFor(user, rootToken, depositData);
-    }
 
-    function _depositEtherFor(address user) private {
-        bytes memory depositData = abi.encode(msg.value);
-        _depositFor(user, ETHER_ADDRESS, depositData);
+        uint256 aTokenValue = abi.decode(depositData, (uint256));
+        address depositor = _msgSender();
+        emit LockedERC20(depositor, user, rootToken, aTokenValue);
+        IERC20(rootToken).safeTransferFrom(depositor, address(this), aTokenValue);
 
-        // payable(typeToPredicate[tokenToType[ETHER_ADDRESS]]).transfer(msg.value);
-        // transfer doesn't work as expected when receiving contract is proxified so using call
-        (bool success, /* bytes memory data */) = typeToPredicate[tokenToType[ETHER_ADDRESS]].call{value: msg.value}("");
-        if (!success) {
-            revert("RootChainManager: ETHER_TRANSFER_FAILED");
-        }
-    }
+        uint256 maTokenValue = getMATokenValue(rootToken, aTokenValue);
+        // replace aTokenValue with maTokenValue in depositData
+        // assembly increases start of bytes array and reduces the size by one uint256
+        uint256 depositDataLength = depositData.length;
+        assembly { 
+            depositData := add(depositData, 32) 
+            mstore(depositData, sub(depositDataLength, 32))
+        }        
+        depositData = abi.encodePacked(maTokenValue, depositData);        
+        bytes memory syncData = abi.encode(user, rootToken, depositData);
+        _stateSender.syncState(
+            childChainManagerAddress,
+            abi.encode(DEPOSIT, syncData)
+        );
+    }    
      
      /**
     * @dev Divides two 27 decimal percision values, rounding half up to the nearest decimal
@@ -328,54 +366,10 @@ contract ATokenRootChainManager is
     * @param _maTokenValue maToken value to convert
     * @return aTokenValue_ The converted aToken value
     **/
-    function getATokenValue(address _aTokenAddress, uint256 _maTokenValue) external returns (uint256 aTokenValue_) {
+    function getATokenValue(address _aTokenAddress, uint256 _maTokenValue) public returns (uint256 aTokenValue_) {
         ILendingPool pool = IAToken(_aTokenAddress).POOL();
         uint256 liquidityIndex = pool.getReserveNormalizedIncome(IAToken(_aTokenAddress).UNDERLYING_ASSET_ADDRESS());
         aTokenValue_ = p27Mul(_maTokenValue, liquidityIndex);        
-    }
-
-    function _depositFor(
-        address user,
-        address rootToken,
-        bytes memory depositData
-    ) private {
-        require(
-            rootToChildToken[rootToken] != address(0x0) &&
-               tokenToType[rootToken] != 0,
-            "RootChainManager: TOKEN_NOT_MAPPED"
-        );
-        address predicateAddress = typeToPredicate[tokenToType[rootToken]];
-        require(
-            predicateAddress != address(0),
-            "RootChainManager: INVALID_TOKEN_TYPE"
-        );
-        require(
-            user != address(0),
-            "RootChainManager: INVALID_USER"
-        );
-
-        ITokenPredicate(predicateAddress).lockTokens(
-            _msgSender(),
-            user,
-            rootToken,
-            depositData
-        );
-        // convert aTokenValue to maTokenValue and send that over the bridge
-        (uint256 aTokenValue) = abi.decode(depositData, (uint256));
-        uint256 maTokenValue = getMATokenValue(rootToken, aTokenValue);
-        // replace aTokenValue with maTokenValue in depositData
-        // assembly increases start of bytes array and reduces the size by one uint256
-        uint256 depositDataLength = depositData.length;
-        assembly { 
-            depositData := add(depositData, 32) 
-            mstore(depositData, sub(depositDataLength, 32))
-        }        
-        depositData = abi.encodePacked(maTokenValue, depositData);        
-        bytes memory syncData = abi.encode(user, rootToken, depositData);
-        _stateSender.syncState(
-            childChainManagerAddress,
-            abi.encode(DEPOSIT, syncData)
-        );
     }
 
     /**
@@ -395,7 +389,7 @@ contract ATokenRootChainManager is
      *  8 - branchMask - 32 bits denoting the path of receipt in merkle tree
      *  9 - receiptLogIndex - Log Index to read from the receipt
      */
-    function exit(bytes calldata inputData) external override {
+    function exit(bytes calldata inputData) external {
         RLPReader.RLPItem[] memory inputDataRLPList = inputData
             .toRlpItem()
             .toList();
@@ -414,7 +408,7 @@ contract ATokenRootChainManager is
         );
         require(
             processedExits[exitHash] == false,
-            "RootChainManager: EXIT_ALREADY_PROCESSED"
+            "ATokenRootChainManager: EXIT_ALREADY_PROCESSED"
         );
         processedExits[exitHash] = true;
 
@@ -432,19 +426,15 @@ contract ATokenRootChainManager is
         address rootToken = childToRootToken[childToken];
         require(
             rootToken != address(0),
-            "RootChainManager: TOKEN_NOT_MAPPED"
+            "ATokenRootChainManager: TOKEN_NOT_MAPPED"
         );
-
-        address predicateAddress = typeToPredicate[
-            tokenToType[rootToken]
-        ];
 
         // branch mask can be maximum 32 bits
         require(
             inputDataRLPList[8].toUint() &
                 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000 ==
                 0,
-            "RootChainManager: INVALID_BRANCH_MASK"
+            "ATokenRootChainManager: INVALID_BRANCH_MASK"
         );
 
         // verify receipt inclusion
@@ -455,7 +445,7 @@ contract ATokenRootChainManager is
                 inputDataRLPList[7].toBytes(), // receiptProof
                 bytes32(inputDataRLPList[5].toUint()) // receiptRoot
             ),
-            "RootChainManager: INVALID_PROOF"
+            "ATokenRootChainManager: INVALID_PROOF"
         );
 
         // verify checkpoint inclusion
@@ -466,12 +456,41 @@ contract ATokenRootChainManager is
             bytes32(inputDataRLPList[5].toUint()), // receiptRoot
             inputDataRLPList[0].toUint(), // headerNumber
             inputDataRLPList[1].toBytes() // blockProof
-        );
+        );         
 
-        ITokenPredicate(predicateAddress).exitTokens(
+        exitTokens(
             _msgSender(),
             childToRootToken[childToken],
             logRLP.toRlpBytes()
+        );
+    }
+
+    function exitTokens(
+        address,
+        address rootToken,
+        bytes memory log
+    ) private {
+        RLPReader.RLPItem[] memory logRLPList = log.toRlpItem().toList();
+        RLPReader.RLPItem[] memory logTopicRLPList = logRLPList[1].toList(); // topics
+
+        require(
+            bytes32(logTopicRLPList[0].toUint()) == TRANSFER_EVENT_SIG, // topic0 is event sig
+            "ATokenRootChainManager: INVALID_SIGNATURE"
+        );
+
+        address withdrawer = address(logTopicRLPList[1].toUint()); // topic1 is from address
+
+        require(
+            address(logTopicRLPList[2].toUint()) == address(0), // topic2 is to address
+            "ATokenRootChainManager: INVALID_RECEIVER"
+        );
+
+        uint256 maTokenValue = logRLPList[2].toUint(); // log data field
+        uint256 aTokenValue = getATokenValue(rootToken, maTokenValue);
+
+        IERC20(rootToken).safeTransfer(
+            withdrawer,
+            aTokenValue
         );
     }
 
@@ -500,7 +519,7 @@ contract ATokenRootChainManager is
                 headerRoot,
                 blockProof
             ),
-            "RootChainManager: INVALID_HEADER"
+            "ATokenRootChainManager: INVALID_HEADER"
         );
         return createdAt;
     }
