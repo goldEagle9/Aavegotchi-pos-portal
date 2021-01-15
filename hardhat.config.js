@@ -41,6 +41,12 @@ module.exports = {
       url: process.env.KOVAN_URL,
       accounts: [process.env.SECRET],
       gasPrice: 5000000000
+    },
+    mainnet: {
+      url: process.env.MAINNET_URL,
+      accounts: [process.env.SECRET],
+      blockGasLimit: 12000000,
+      gasPrice: 62000000000
     }
   },
   gasReporter: {

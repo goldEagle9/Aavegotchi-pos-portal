@@ -1,5 +1,4 @@
 pragma solidity 0.6.6;
-
 import {UpgradableProxy} from "../../common/Proxy/UpgradableProxy.sol";
 
 contract ERC1155PredicateProxy is UpgradableProxy {

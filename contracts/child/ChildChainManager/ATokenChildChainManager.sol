@@ -11,7 +11,7 @@ struct AppStorage {
     bool inited;
     address childTokenImplementation;    
     address mapper;
-    address stateSyncer;
+    address stateReceiver;
     address owner;
 }
 
@@ -35,8 +35,8 @@ contract ATokenChildChainManager is
     function mapper() external view returns (address) {
         return s.mapper;
     }
-    function stateSyncer() external view returns (address) {
-        return s.stateSyncer;
+    function stateReceiver() external view returns (address) {
+        return s.stateReceiver;
     }
     function owner() external view returns (address) {
         return s.owner;
@@ -48,23 +48,20 @@ contract ATokenChildChainManager is
     }
 
     modifier onlyMapper() {
-        require(msg.sender == s.mapper, "Is not mapper");
+        require(msg.sender == s.mapper || msg.sender == s.mapper, "Is not mapper");
         _;
     }
 
-    modifier onlyStateSyncer() {
-        require(msg.sender == s.stateSyncer, "Is not state syncer");
+    modifier onlyStateReceiver() {
+        require(msg.sender == s.stateReceiver, "Is not state receiver");
         _;
     }
 
-    /// @dev This emits when ownership of a contract changes.    
-    event OwnershipTransferred(address indexed _previousOwner, address indexed _newOwner);
     
-    /// @notice Set the address of the new owner of the contract
-    /// @dev Set _newOwner to address(0) to renounce any ownership.
-    /// @param _newOwner The address of the new owner of the contract    
-    function transferOwnership(address _newOwner) external onlyOwner {        
-        emit OwnershipTransferred(s.owner, _newOwner);
+    event SetOwner(address indexed _previousOwner, address indexed _newOwner);
+    
+    function setOwner(address _newOwner) external onlyOwner {        
+        emit SetOwner(s.owner, _newOwner);
         s.owner = _newOwner;
     }
 
@@ -75,19 +72,19 @@ contract ATokenChildChainManager is
         s.mapper = _newMapper;
     }
 
-    event SetStateSyncer(address indexed _previousStateSyncer, address indexed _newStateSyncer);
+    event SetStateReceiver(address indexed _previousStateReceiver, address indexed _newStateReceiver);
 
-    function setStateSyncer(address _newStateSyncer) external onlyOwner {
-        emit SetMapper(s.stateSyncer, _newStateSyncer);
-        s.stateSyncer = _newStateSyncer;
+    function setStateReceiver(address _newStateReceiver) external onlyOwner {
+        emit SetMapper(s.stateReceiver, _newStateReceiver);
+        s.stateReceiver = _newStateReceiver;
     }
            
-    function initialize(address _owner, address _mapper, address _stateSyncer, address _childTokenImplementation) external {
+    function initialize(address _owner, address _mapper, address _stateReceiver, address _childTokenImplementation) external {
         require(!s.inited, "already inited");
         s.inited = true;
         s.owner = _owner;
         s.mapper = _mapper;
-        s.stateSyncer = _stateSyncer; //0x0000000000000000000000000000000000001001
+        s.stateReceiver = _stateReceiver; //0x0000000000000000000000000000000000001001
         s.childTokenImplementation = _childTokenImplementation;        
     }
     
@@ -105,7 +102,7 @@ contract ATokenChildChainManager is
      * in case of deposit, `syncData` is encoded address `user`, address `rootToken` and bytes `depositData`
      * `depositData` is token specific data (amount in case of ERC20). It is passed as is to child token
      */
-    function onStateReceive(uint256, bytes calldata data) external override onlyStateSyncer {
+    function onStateReceive(uint256, bytes calldata data) external override onlyStateReceiver {
         (bytes32 syncType, bytes memory syncData) = abi.decode(data,(bytes32, bytes));
 
         if (syncType == DEPOSIT) {
@@ -129,6 +126,10 @@ contract ATokenChildChainManager is
         );
         IChildToken childTokenContract = IChildToken(childTokenAddress);
         childTokenContract.deposit(user, depositData);
+    }
+
+    function childTokenBytecodeHash() external pure returns (bytes32) {
+        return keccak256(type(MATokenUChildERC20Proxy).creationCode);
     }
 
     function _mapToken(bytes memory syncData) internal {

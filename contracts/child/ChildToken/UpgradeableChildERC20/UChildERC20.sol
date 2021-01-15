@@ -1,5 +1,6 @@
 pragma solidity 0.6.6;
 
+
 import {ERC20} from "./ERC20.sol";
 import {AccessControlMixin} from "../../../common/AccessControlMixin.sol";
 import {IChildToken} from "../IChildToken.sol";

@@ -1,5 +1,6 @@
 pragma solidity 0.6.6;
 
+
 import {Initializable} from "./Initializable.sol";
 
 contract EIP712Base is Initializable {

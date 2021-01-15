@@ -1,4 +1,5 @@
 pragma solidity 0.6.6;
+
 import {IERCProxy} from "./IERCProxy.sol";
 
 abstract contract Proxy is IERCProxy {

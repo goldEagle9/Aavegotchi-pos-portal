@@ -3,7 +3,7 @@
 async function main () {
   const accounts = await ethers.getSigners()
   const account = await accounts[0].getAddress()
-  const stateSyncer = '0x0000000000000000000000000000000000001001'
+  const stateReceiver = '0x0000000000000000000000000000000000001001'
 
   const ChildChainManager = await ethers.getContractFactory('ATokenChildChainManager')
   const childChainManager = await ChildChainManager.deploy()
@@ -18,7 +18,7 @@ async function main () {
   childChainManagerProxy = await ethers.getContractAt('ATokenChildChainManager', childChainManagerProxy.address)
   // UChildERC20:  0xDf36944e720cf5Af30a3C5D80d36db5FB71dDE40
   const erc20Implementation = '0xDf36944e720cf5Af30a3C5D80d36db5FB71dDE40'
-  const tx = await childChainManagerProxy.initialize(account, account, stateSyncer, erc20Implementation)
+  const tx = await childChainManagerProxy.initialize(account, account, stateReceiver, erc20Implementation)
   console.log('Initializing: ', tx.hash)
   const receipt = await tx.wait()
 
@@ -27,6 +27,9 @@ async function main () {
   } else {
     console.log('ChildChainManager initialized faileddddddddddddddddddddd')
   }
+
+  const childTokenBytecodeHash = await childChainManagerProxy.childTokenBytecodeHash()
+  console.log('childTokenBytecodeHash:', childTokenBytecodeHash)
 
   // ChildChainManagerProxy: 0x14aB595377e4fccCa46062A9109FFAC7FA4d3F18
 }

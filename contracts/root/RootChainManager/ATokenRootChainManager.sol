@@ -1,19 +1,17 @@
 pragma solidity 0.6.6;
 
 import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
-import {ATokenRootChainManagerStorage} from "./ATokenRootChainManagerStorage.sol"; 
-import {IStateSender} from "../StateSender/IStateSender.sol";
 import {ICheckpointManager} from "../ICheckpointManager.sol";
 import {RLPReader} from "../../lib/RLPReader.sol";
 import {MerklePatriciaProof} from "../../lib/MerklePatriciaProof.sol";
 import {Merkle} from "../../lib/Merkle.sol";
-import {Initializable} from "../../common/Initializable.sol";
 import {NativeMetaTransaction} from "../../common/NativeMetaTransaction.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {AccessControlMixin} from "../../common/AccessControlMixin.sol";
 import {ContextMixin} from "../../common/ContextMixin.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import {IStateSender} from "../StateSender/IStateSender.sol";
+import {ICheckpointManager} from "../ICheckpointManager.sol";
+
 
 interface ILendingPool {
     function getReserveNormalizedIncome(address _asset) external view returns (uint256);
@@ -30,11 +28,21 @@ interface IERC20Meta {
     function decimals() external view returns (uint8);
 }
 
-contract ATokenRootChainManager is    
-    Initializable,
-    AccessControl, // included to match old storage layout while upgrading
-    ATokenRootChainManagerStorage, // created to match old storage layout while upgrading
-    AccessControlMixin,
+struct AppStorage {
+    mapping(address => address) rootToChildToken;
+    mapping(address => address) childToRootToken;    
+    mapping(bytes32 => bool) processedExits;
+    bool inited;
+    IStateSender stateSender;
+    ICheckpointManager checkpointManager;
+    address childChainManagerAddress;
+    bytes32 childTokenBytecodeHash;
+    address owner;
+    address mapper;
+}
+
+contract ATokenRootChainManager is            
+    ICheckpointManager,
     NativeMetaTransaction,
     ContextMixin
 {
@@ -43,6 +51,8 @@ contract ATokenRootChainManager is
     using Merkle for bytes32;
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
+
+    AppStorage s;
 
     // maybe DEPOSIT and MAP_TOKEN can be reduced to bytes4
     bytes32 public constant DEPOSIT = keccak256("DEPOSIT");
@@ -65,15 +75,6 @@ contract ATokenRootChainManager is
         uint256 amount
     );
 
-    function _msgSender()
-        internal
-        override
-        view
-        returns (address payable sender)
-    {
-        return ContextMixin.msgSender();
-    }
-
     /**
      * @notice Deposit ether by directly sending to the contract
      * The account sending ether receives WETH on child chain
@@ -81,46 +82,66 @@ contract ATokenRootChainManager is
     receive() external payable {
         revert("Cannot send ETH over aToken bridge");
     }
-
-    /**
-     * @notice Initialize the contract after it has been proxified
-     * @dev meant to be called once immediately after deployment
-     * @param owner the account that should be granted admin role
-     */
+    
     function initialize(
-        address owner,
-        address stateSender,
-        address checkpointManager,
+        address _owner,
+        address _stateSender,
+        address _checkpointManager,
         address _childChainManagerAddress,
         bytes32 _childTokenBytecodeHash
     )
         external
-        initializer
     {
-        _initializeEIP712("ATokenRootChainManager");
-        _setupContractId("ATokenRootChainManager");
-        _setupRole(DEFAULT_ADMIN_ROLE, owner);
-        _setupRole(MAPPER_ROLE, owner);
-        _stateSender = IStateSender(stateSender);
-        _checkpointManager = ICheckpointManager(checkpointManager);
-        childChainManagerAddress = _childChainManagerAddress;
-        childTokenBytecodeHash = _childTokenBytecodeHash;        
+        require(!s.inited, "already inited");
+        s.inited = true;
+        _initializeEIP712("ATokenRootChainManager");        
+        s.owner = _owner; 
+        s.mapper = _owner;        
+        s.stateSender = IStateSender(_stateSender);
+        s.checkpointManager = ICheckpointManager(_checkpointManager);
+        s.childChainManagerAddress = _childChainManagerAddress;
+        s.childTokenBytecodeHash = _childTokenBytecodeHash;        
     }
 
-    // adding seperate function setupContractId since initialize is already called with old implementation
-    function setupContractId()
-        external
-        only(DEFAULT_ADMIN_ROLE)
-    {
-        _setupContractId("ATokenRootChainManager");
+    function rootToChildToken(address _rootToken) external view returns (address) {
+        return s.rootToChildToken[_rootToken];
+    }
+    function childToRootToken(address _childToken) external view returns (address) {
+        return s.childToRootToken[_childToken];
+    }
+    function mapper() external view returns (address) {
+        return s.mapper;
+    }
+    function stateSender() external view returns (address) {
+        return address(s.stateSender);
     }
 
-    // adding seperate function initializeEIP712 since initialize is already called with old implementation
-    function initializeEIP712()
-        external
-        only(DEFAULT_ADMIN_ROLE)
-    {
-        _setDomainSeperator("ATokenRootChainManager");
+    // Old function here so as to not break existing functionality
+    function stateSenderAddress() external view returns (address) {
+        return address(s.stateSender);
+    }
+
+    function owner() external view returns (address) {
+        return s.owner;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == s.owner, "Is not owner");
+        _;
+    }
+
+    modifier onlyMapper() {
+        require(msg.sender == s.mapper || msg.sender == s.owner, "Is not mapper");
+        _;
+    }
+
+    modifier onlyStateSender() {
+        require(msg.sender == address(s.stateSender), "Is not state sender");
+        _;
+    }   
+    
+    function processedExits(bytes32 _exitHash) external view returns (bool) {
+        return s.processedExits[_exitHash];
     }
 
     /**
@@ -131,18 +152,10 @@ contract ATokenRootChainManager is
      */
     function setStateSender(address newStateSender)
         external
-        only(DEFAULT_ADMIN_ROLE)
+        onlyOwner
     {
-        _stateSender = IStateSender(newStateSender);
-    }
-
-    /**
-     * @notice Get the address of contract set as state sender
-     * @return The address of state sender contract
-     */
-    function stateSenderAddress() external view returns (address) {
-        return address(_stateSender);
-    }
+        s.stateSender = IStateSender(newStateSender);
+    }   
 
     /**
      * @notice Set the checkpoint manager, callable only by admins
@@ -151,9 +164,9 @@ contract ATokenRootChainManager is
      */
     function setCheckpointManager(address newCheckpointManager)
         external
-        only(DEFAULT_ADMIN_ROLE)
+        onlyOwner
     {
-        _checkpointManager = ICheckpointManager(newCheckpointManager);
+        s.checkpointManager = ICheckpointManager(newCheckpointManager);
     }
 
     /**
@@ -161,7 +174,21 @@ contract ATokenRootChainManager is
      * @return The address of checkpoint manager contract
      */
     function checkpointManagerAddress() external view returns (address) {
-        return address(_checkpointManager);
+        return address(s.checkpointManager);
+    }
+
+    event SetOwner(address indexed _previousOwner, address indexed _newOwner);
+    
+    function setOwner(address _newOwner) external onlyOwner {        
+        emit SetOwner(s.owner, _newOwner);
+        s.owner = _newOwner;
+    }
+
+    event SetMapper(address indexed _previousMapper, address indexed _newMapper);
+
+    function setMapper(address _newMapper) external onlyOwner {
+        emit SetMapper(s.mapper, _newMapper);
+        s.mapper = _newMapper;
     }
 
     /**
@@ -172,11 +199,11 @@ contract ATokenRootChainManager is
      */
     function setChildChainManagerAddressAndChildTokenBytecodeHash(address newChildChainManager, bytes32 newChildTokenBytecodeHash)
         external
-        only(DEFAULT_ADMIN_ROLE)
+        onlyOwner
     {
         require(newChildChainManager != address(0x0), "ATokenRootChainManager: INVALID_CHILD_CHAIN_ADDRESS");
-        childChainManagerAddress = newChildChainManager;        
-        childTokenBytecodeHash = newChildTokenBytecodeHash;
+        s.childChainManagerAddress = newChildChainManager;        
+        s.childTokenBytecodeHash = newChildTokenBytecodeHash;
     }
 
     /**
@@ -186,10 +213,10 @@ contract ATokenRootChainManager is
      */
     function setChildChainManagerAddress(address newChildChainManager)
         external
-        only(DEFAULT_ADMIN_ROLE)
+        onlyOwner
     {
         require(newChildChainManager != address(0x0), "ATokenRootChainManager: INVALID_CHILD_CHAIN_ADDRESS");
-        childChainManagerAddress = newChildChainManager;                
+        s.childChainManagerAddress = newChildChainManager;                
     }
 
     /**
@@ -199,9 +226,9 @@ contract ATokenRootChainManager is
      */
     function setChildTokenBytecodeHash(bytes32 newChildTokenBytecodeHash)
         external
-        only(DEFAULT_ADMIN_ROLE)
+        onlyOwner
     {        
-        childTokenBytecodeHash = newChildTokenBytecodeHash;                
+        s.childTokenBytecodeHash = newChildTokenBytecodeHash;                
     }
 
     
@@ -209,9 +236,9 @@ contract ATokenRootChainManager is
         // precompute childToken address for mapping
         childToken_ = address(uint160(uint(keccak256(abi.encodePacked(
             bytes1(0xff),
-            childChainManagerAddress, // contract creating address
+            s.childChainManagerAddress, // contract creating address
             bytes32(bytes20(rootToken)), // salt
-            childTokenBytecodeHash // bytecode hash
+            s.childTokenBytecodeHash // bytecode hash
         )))));
     }
 
@@ -221,10 +248,10 @@ contract ATokenRootChainManager is
      */
     function mapToken(
         address rootToken        
-    ) external only(MAPPER_ROLE) {
+    ) external onlyMapper {
         // explicit check if token is already mapped to avoid accidental remaps
         require(
-            rootToChildToken[rootToken] == address(0),
+            s.rootToChildToken[rootToken] == address(0),
             "ATokenRootChainManager: ALREADY_MAPPED"
         );
         address childToken = childTokenAddress(rootToken);
@@ -238,18 +265,18 @@ contract ATokenRootChainManager is
      */
     function remapToken(
         address rootToken        
-    ) external only(MAPPER_ROLE) {
+    ) external onlyMapper {
         address childToken = childTokenAddress(rootToken);
         // cleanup old mapping
-        address oldChildToken = rootToChildToken[rootToken];
+        address oldChildToken = s.rootToChildToken[rootToken];
         require(childToken != oldChildToken, "ATokenRootChainManager: Child token is the same");
-        address oldRootToken = childToRootToken[childToken];
-        if (rootToChildToken[oldRootToken] != address(0)) {
-            rootToChildToken[oldRootToken] = address(0);            
+        address oldRootToken = s.childToRootToken[childToken];
+        if (s.rootToChildToken[oldRootToken] != address(0)) {
+            s.rootToChildToken[oldRootToken] = address(0);            
         }
 
-        if (childToRootToken[oldChildToken] != address(0)) {
-            childToRootToken[oldChildToken] = address(0);
+        if (s.childToRootToken[oldChildToken] != address(0)) {
+            s.childToRootToken[oldChildToken] = address(0);
         }      
         _mapToken(rootToken, childToken);
     }
@@ -258,8 +285,8 @@ contract ATokenRootChainManager is
         address rootToken,
         address childToken
     ) private {                        
-        rootToChildToken[rootToken] = childToken;
-        childToRootToken[childToken] = rootToken;        
+        s.rootToChildToken[rootToken] = childToken;
+        s.childToRootToken[childToken] = rootToken;        
 
         emit TokenMapped(rootToken, childToken, 0x0);
 
@@ -269,8 +296,8 @@ contract ATokenRootChainManager is
             abi.encodePacked('m',IERC20Meta(rootToken).symbol()),
             IERC20Meta(rootToken).decimals()
         );
-        _stateSender.syncState(
-            childChainManagerAddress,
+        s.stateSender.syncState(
+            s.childChainManagerAddress,
             abi.encode(MAP_TOKEN, syncData)
         );
     }
@@ -288,14 +315,14 @@ contract ATokenRootChainManager is
         address rootToken,
         bytes memory depositData
     ) public {        
-        require(rootToChildToken[rootToken] != address(0x0), "ATokenRootChainManager: TOKEN_NOT_MAPPED");
+        require(s.rootToChildToken[rootToken] != address(0x0), "ATokenRootChainManager: TOKEN_NOT_MAPPED");
         require(
             user != address(0),
             "ATokenRootChainManager: INVALID_USER"
         );
 
         uint256 aTokenValue = abi.decode(depositData, (uint256));
-        address depositor = _msgSender();
+        address depositor = msgSender();
         emit LockedERC20(depositor, user, rootToken, aTokenValue);
         IERC20(rootToken).safeTransferFrom(depositor, address(this), aTokenValue);
 
@@ -309,8 +336,8 @@ contract ATokenRootChainManager is
         }        
         depositData = abi.encodePacked(maTokenValue, depositData);        
         bytes memory syncData = abi.encode(user, rootToken, depositData);
-        _stateSender.syncState(
-            childChainManagerAddress,
+        s.stateSender.syncState(
+            s.childChainManagerAddress,
             abi.encode(DEPOSIT, syncData)
         );
     }    
@@ -407,10 +434,10 @@ contract ATokenRootChainManager is
             )
         );
         require(
-            processedExits[exitHash] == false,
+            s.processedExits[exitHash] == false,
             "ATokenRootChainManager: EXIT_ALREADY_PROCESSED"
         );
-        processedExits[exitHash] = true;
+        s.processedExits[exitHash] = true;
 
         RLPReader.RLPItem[] memory receiptRLPList = inputDataRLPList[6]
             .toBytes()
@@ -423,7 +450,7 @@ contract ATokenRootChainManager is
 
         address childToken = RLPReader.toAddress(logRLP.toList()[0]); // log emitter address field
         // log should be emmited only by the child token
-        address rootToken = childToRootToken[childToken];
+        address rootToken = s.childToRootToken[childToken];
         require(
             rootToken != address(0),
             "ATokenRootChainManager: TOKEN_NOT_MAPPED"
@@ -459,8 +486,8 @@ contract ATokenRootChainManager is
         );         
 
         exitTokens(
-            _msgSender(),
-            childToRootToken[childToken],
+            msgSender(),
+            s.childToRootToken[childToken],
             logRLP.toRlpBytes()
         );
     }
@@ -508,7 +535,7 @@ contract ATokenRootChainManager is
             ,
             uint256 createdAt,
 
-        ) = _checkpointManager.headerBlocks(headerNumber);
+        ) = s.checkpointManager.headerBlocks(headerNumber);
 
         require(
             keccak256(

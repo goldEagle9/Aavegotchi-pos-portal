@@ -1,5 +1,6 @@
 pragma solidity 0.6.6;
 
+
 library Merkle {
     function checkMembership(
         bytes32 leaf,

@@ -1,5 +1,4 @@
 pragma solidity 0.6.6;
-
 import {MerklePatriciaProof} from "../lib/MerklePatriciaProof.sol";
 import {RLPReader} from "../lib/RLPReader.sol";
 

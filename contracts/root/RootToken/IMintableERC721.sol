@@ -1,6 +1,5 @@
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-
 pragma solidity 0.6.6;
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 interface IMintableERC721 is IERC721 {
     /**
