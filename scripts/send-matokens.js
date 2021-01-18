@@ -16,27 +16,22 @@ async function main () {
   const userAddress1 = '0x66E7960EC00D100Ffc035f5d422107BcFA2A29a3' // SECRET2
   const userAddress2 = '0x819C3fc356bb319035f9D2886fAc9E57DF0343F5' // SECRET
 
-  const maticClient = new MaticPOSClient({
+  const maticPOSClient = new MaticPOSClient({
+    network: 'mainnet',
+    version: 'v1',
     parentProvider: new HDWalletProvider(process.env.SECRET, process.env.MAINNET_URL),
     maticProvider: new HDWalletProvider(process.env.SECRET2, 'https://rpc-mainnet.matic.network'),
-    posRootChainManager: rootChainManagerAddress,
-    posERC20Predicate: rootChainManagerAddress,
-    parentDefaultOptions: { from: userAddress2 },
-    maticDefaultOptions: { from: userAddress1 }
+    posRootChainManager: rootChainManagerAddress
   })
+  // const ERC20_TRANSFER_EVENT_SIG = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+
+  // const payload = await maticPOSClient.posRootChainManager.customPayload(burnHash, ERC20_TRANSFER_EVENT_SIG)
+  // console.log(payload)
 
   // token burming
   // const childToken = await ethers.getContractAt('ChildERC20', childTokenAddress)
   // const balance = await childToken.balanceOf(userAddress1)
   // console.log(userAddress1, ' sending maToken balance:', balance.toString())
-
-  const burnHash = '0x5b1ed3627b10f23a9a6bc4cdb25e84351943b6edf0a16d374d44cc5d43d15043'
-  const tx = await maticClient.exitERC20(burnHash, {
-    from: userAddress2,
-    gasPrice: 65000000000,
-    gasLimit: 1000000
-  })
-  console.log("Exit hash: ", tx.transactionHash) // eslint-disable-line
 
   //   const tx = await maticClient.burnERC20(childTokenAddress, balance.toString())
   //   console.log('maToken burn transaction hash: ', tx.transactionHash)
@@ -77,6 +72,15 @@ async function main () {
   //   } else {
   //     throw Error('Deposit fail')
   //   }
+
+  const burnHash = '0x5b1ed3627b10f23a9a6bc4cdb25e84351943b6edf0a16d374d44cc5d43d15043'
+
+  const tx = await maticPOSClient.exitERC20(burnHash, {
+    from: userAddress2,
+    gasPrice: 65000000000,
+    gasLimit: 1000000
+  })
+  console.log("Exit hash: ", tx.transactionHash) // eslint-disable-line
 
   // call mapping function man
 }
