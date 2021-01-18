@@ -1,5 +1,21 @@
 /* global ethers */
 
+function addCommas (nStr) {
+  nStr += ''
+  const x = nStr.split('.')
+  let x1 = x[0]
+  const x2 = x.length > 1 ? '.' + x[1] : ''
+  var rgx = /(\d+)(\d{3})/
+  while (rgx.test(x1)) {
+    x1 = x1.replace(rgx, '$1' + ',' + '$2')
+  }
+  return x1 + x2
+}
+
+function strDisplay (str) {
+  return addCommas(str.toString())
+}
+
 async function main () {
   // const accounts = await ethers.getSigners()
   // const account = await accounts[0].getAddress()
@@ -8,28 +24,31 @@ async function main () {
   const uChildERC20 = await UChildERC20.deploy()
   await uChildERC20.deployed()
   console.log('Deployed UChildERC20: ', uChildERC20.address)
-
-  const UChildERC20Proxy = await ethers.getContractFactory('UChildERC20Proxy')
-  let uChildERC20Proxy = await UChildERC20Proxy.deploy(uChildERC20.address)
-  await uChildERC20Proxy.deployed()
-  console.log('Deployed UChildERC20Proxy: ', uChildERC20Proxy.address)
-
-  uChildERC20Proxy = await ethers.getContractAt('UChildERC20', uChildERC20Proxy.address)
-
-  const name = 'Matic Aave interest bearing DAI'
-  const symbol = 'maDAI'
-  const decimals = 18
-  const childChainManager = '0x14aB595377e4fccCa46062A9109FFAC7FA4d3F18'
-
-  const tx = await uChildERC20Proxy.initialize(name, symbol, decimals, childChainManager)
-  console.log('Initializing: ', tx.hash)
+  const tx = uChildERC20.deployTransaction
   const receipt = await tx.wait()
+  console.log('deploy gas used:' + strDisplay(receipt.gasUsed))
 
-  if (receipt.status) {
-    console.log('ChildERC20 initialized successfully')
-  } else {
-    console.log('ChildERC20 initialized faileddddddddddddddddddddd')
-  }
+  // const UChildERC20Proxy = await ethers.getContractFactory('UChildERC20Proxy')
+  // let uChildERC20Proxy = await UChildERC20Proxy.deploy(uChildERC20.address)
+  // await uChildERC20Proxy.deployed()
+  // console.log('Deployed UChildERC20Proxy: ', uChildERC20Proxy.address)
+
+  // uChildERC20Proxy = await ethers.getContractAt('UChildERC20', uChildERC20Proxy.address)
+
+  // const name = 'Matic Aave interest bearing DAI'
+  // const symbol = 'maDAI'
+  // const decimals = 18
+  // const childChainManager = '0x14aB595377e4fccCa46062A9109FFAC7FA4d3F18'
+
+  // const tx = await uChildERC20Proxy.initialize(name, symbol, decimals, childChainManager)
+  // console.log('Initializing: ', tx.hash)
+  // const receipt = await tx.wait()
+
+  // if (receipt.status) {
+  //   console.log('ChildERC20 initialized successfully')
+  // } else {
+  //   console.log('ChildERC20 initialized faileddddddddddddddddddddd')
+  // }
 }
 
 // Deployed UChildERC20:  0xDf36944e720cf5Af30a3C5D80d36db5FB71dDE40
