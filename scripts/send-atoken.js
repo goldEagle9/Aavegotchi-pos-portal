@@ -3,7 +3,10 @@
 // aWETH
 // const rootTokenAddress = '0x030ba81f1c18d280636f32af80b9aad02cf0854e'
 // aUSDC
-const rootTokenAddress = '0xBcca60bB61934080951369a648Fb03DF4F96263C'
+// const rootTokenAddress = '0xBcca60bB61934080951369a648Fb03DF4F96263C'
+// aDAI
+const rootTokenAddress = '0x028171bca77440897b824ca71d1c56cac55b68a3'
+
 const rootChainManagerAddress = '0x0D29aDA4c818A9f089107201eaCc6300e56E0d5c'
 
 async function main () {
