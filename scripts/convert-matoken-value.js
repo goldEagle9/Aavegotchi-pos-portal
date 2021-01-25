@@ -3,16 +3,14 @@
 const { ethers } = require('hardhat')
 
 const rootChainManagerAddress = '0x0D29aDA4c818A9f089107201eaCc6300e56E0d5c'
-// uUSDC
-// const aTokenContractAddress = '0xbcca60bb61934080951369a648fb03df4f96263c'
-// aDAI
-const aTokenContractAddress = '0x028171bca77440897b824ca71d1c56cac55b68a3'
+// aUSDC
+const aTokenContractAddress = '0xbcca60bb61934080951369a648fb03df4f96263c'
 
 async function main () {
   const rootChainManagerProxy = await ethers.getContractAt('ATokenRootChainManager', rootChainManagerAddress)
-  const aTokenValue = ethers.utils.parseEther('500')
-  const maTokenValue = await rootChainManagerProxy.getMATokenValue(aTokenContractAddress, aTokenValue)
-  console.log(`aToken value ${aTokenValue.toString()} converted to maTokenValue: ${maTokenValue.toString()}`)
+  const maTokenValue = ethers.utils.parseEther('1')
+  const aTokenValue = await rootChainManagerProxy.getATokenValue(aTokenContractAddress, maTokenValue)
+  console.log(`maToken value ${maTokenValue.toString()} converted to aTokenValue: ${aTokenValue.toString()}`)
 }
 
 // Child token addresses
