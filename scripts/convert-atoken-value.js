@@ -3,14 +3,15 @@
 const { ethers } = require('hardhat')
 
 const rootChainManagerAddress = '0x0D29aDA4c818A9f089107201eaCc6300e56E0d5c'
-// uUSDC
-// const aTokenContractAddress = '0xbcca60bb61934080951369a648fb03df4f96263c'
+
+// aUSDC
+const aTokenContractAddress = '0xbcca60bb61934080951369a648fb03df4f96263c'
 // aDAI
-const aTokenContractAddress = '0x028171bca77440897b824ca71d1c56cac55b68a3'
+// const aTokenContractAddress = '0x028171bca77440897b824ca71d1c56cac55b68a3'
 
 async function main () {
   const rootChainManagerProxy = await ethers.getContractAt('ATokenRootChainManager', rootChainManagerAddress)
-  const aTokenValue = ethers.utils.parseEther('500')
+  const aTokenValue = ethers.utils.parseEther('522')
   const maTokenValue = await rootChainManagerProxy.getMATokenValue(aTokenContractAddress, aTokenValue)
   console.log(`aToken value ${aTokenValue.toString()} converted to maTokenValue: ${maTokenValue.toString()}`)
 }

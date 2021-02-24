@@ -1,29 +1,43 @@
 /* global ethers */
 
-// aWETH
-// const rootTokenAddress = '0x030ba81f1c18d280636f32af80b9aad02cf0854e'
-// aUSDC
-const rootTokenAddress = '0xBcca60bB61934080951369a648Fb03DF4F96263C'
-// aDAI
-// const rootTokenAddress = '0x028171bca77440897b824ca71d1c56cac55b68a3'
-
 const rootChainManagerAddress = '0x0D29aDA4c818A9f089107201eaCc6300e56E0d5c'
 
 async function main () {
   const accounts = await ethers.getSigners()
   const account = await accounts[0].getAddress()
-
+  const newOwner = '0x14B76eBB2F4391D8b506d6c7e6ABAf5FcaBd26F8'
   const rootChainManager = await ethers.getContractAt('ATokenRootChainManager', rootChainManagerAddress)
-  const tx = await rootChainManager.setOwner()
-  // const rootToken = await ethers.getContractAt('ChildERC20', rootTokenAddress)
+  let tx = await rootChainManager.setMapper(newOwner)
+  console.log('Setting mapper: ', tx)
+  let receipt = await tx.wait()
+  if (receipt.status) {
+    console.log('Setting mapper success')
+  } else {
+    throw Error('Setting mapper fail')
+  }
 
-  console.log('Deposit transaction: ', tx.hash)
+  tx = await rootChainManager.setOwner(newOwner)
+  console.log('Setting owner: ', tx)
   receipt = await tx.wait()
   if (receipt.status) {
-    console.log('Deposit success')
+    console.log('Setting owner success')
   } else {
-    throw Error('Deposit fail')
+    throw Error('Setting owner fail')
   }
+
+  const rootChainManagerProxy = await ethers.getContractAt('RootChainManagerProxy', rootChainManagerAddress)
+  tx = await rootChainManagerProxy.transferProxyOwnership(newOwner)
+  console.log('Setting proxy owner: ', tx)
+  receipt = await tx.wait()
+  if (receipt.status) {
+    console.log('Setting proxy owner success')
+  } else {
+    throw Error('Setting proxy owner fail')
+  }
+
+  // const rootToken = await ethers.getContractAt('ChildERC20', rootTokenAddress)
+
+  // console.log('Deposit transaction: ', tx.hash)
 
   // call mapping function man
 }

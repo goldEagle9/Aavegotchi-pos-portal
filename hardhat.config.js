@@ -47,7 +47,7 @@ module.exports = {
       url: process.env.MAINNET_URL,
       accounts: [process.env.SECRET],
       blockGasLimit: 12000000,
-      gasPrice: 60000000000
+      gasPrice: 120000000000
     }
   },
   etherscan: {

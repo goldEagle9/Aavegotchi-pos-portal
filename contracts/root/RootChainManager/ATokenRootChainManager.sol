@@ -1,5 +1,11 @@
 pragma solidity 0.6.6;
 
+/**
+ * aToken bridge to Matic Network
+ * Author: Nick Mudge <nick@aavegotchi.com>
+ * Modified from Matics ERC20 bridge: https://github.com/maticnetwork/pos-portal
+ */
+
 import {SafeMath} from "@openzeppelin/contracts/math/SafeMath.sol";
 import {ICheckpointManager} from "../ICheckpointManager.sol";
 import {RLPReader} from "../../lib/RLPReader.sol";
@@ -116,17 +122,18 @@ contract ATokenRootChainManager is ICheckpointManager, NativeMetaTransaction, Co
     }
 
     modifier onlyOwner() {
-        require(msg.sender == s.owner, "Is not owner");
+        require(msgSender() == s.owner, "Is not owner");
         _;
     }
 
     modifier onlyMapper() {
-        require(msg.sender == s.mapper || msg.sender == s.owner, "Is not mapper");
+        address sender = msgSender();
+        require(sender == s.mapper || sender == s.owner, "Is not mapper");
         _;
     }
 
     modifier onlyStateSender() {
-        require(msg.sender == address(s.stateSender), "Is not state sender");
+        require(msgSender() == address(s.stateSender), "Is not state sender");
         _;
     }
 
