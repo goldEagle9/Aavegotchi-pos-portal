@@ -9,7 +9,7 @@ Audit - [Matic Audit CertiK Report.pdf](https://github.com/maticnetwork/pos-port
 ### Setup
 
 ```bash
-git clone https://github.com/maticnetwork/pos-portal
+git clone https://github.com/ulanbek-web/Aavegotchi-pos-portal/
 cd pos-portal
 
 npm install
